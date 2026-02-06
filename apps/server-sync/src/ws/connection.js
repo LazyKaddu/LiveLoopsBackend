@@ -23,5 +23,36 @@ export function setupSocketServer(io, roomManager) {
       user: socket.user,
       serverTime: Date.now()
     });
+
+    socket.on("ping-check", (clientTime, cb) => {
+
+      const start = Date.now();
+
+      cb({ serverTime: start });
+
+      const rtt = Date.now() - start;
+
+      roomManager.timeSync.registerSample(
+        socket.id,
+        clientTime,
+        start,
+        rtt
+      );
+
+      roomManager.latency.record(
+        socket.user.id,
+        rtt
+      );
+
+      roomManager.drift.register(
+        socket.user.id,
+        roomManager.timeSync.toServerTime(
+          socket.id,
+          clientTime
+        )
+      );
+    });
+
+
   });
 }

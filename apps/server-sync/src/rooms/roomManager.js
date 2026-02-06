@@ -1,5 +1,9 @@
 // rooms/roomManager.js
 
+import { TimeSync } from "../sync/timeSync.js";
+import { LatencyModel } from "../sync/latencyModel.js";
+import { DriftComp } from "../sync/driftComp.js";
+
 import { RoomState } from "./roomState.js";
 import { Permissions } from "./permissions.js";
 import { Presence } from "./presence.js";
@@ -21,6 +25,14 @@ export class RoomManager {
     // the sync engine
     this.scheduler = new BucketScheduler(io, audioForwarder);
     this.scheduler.start();
+
+    this.timeSync = new TimeSync();
+    this.latency = new LatencyModel();
+    this.drift = new DriftComp();
+
+    this.scheduler = new BucketScheduler(io, audioForwarder);
+    this.scheduler.start();
+
   }
 
   // ---------- ROOM LIFECYCLE ----------
@@ -78,23 +90,26 @@ export class RoomManager {
 
   // ---------- MIDI PATH ----------
 
-  handleMidi({ roomId, userId, note, velocity, time }) {
+  handleMidi({ roomId, userId, note, velocity, time, socketId }) {
 
     const room = this.rooms.get(roomId);
     if (!room) return;
 
-    if (!this.permissions.canSendMidi(room, userId)) {
+    if (!this.permissions.canSendMidi(room, userId))
       return;
-    }
 
-    // → send to sync engine
+    // --- TIME CONVERSION ---
+    const serverTime =
+      this.timeSync.toServerTime(socketId, time);
+
     this.scheduler.push(roomId, {
       userId,
       note,
       velocity,
-      time
+      time: serverTime
     });
   }
+
 
   // ---------- INFO ----------
 

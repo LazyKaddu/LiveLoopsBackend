@@ -1,36 +1,50 @@
-import express from 'express';
-import cors from 'cors';
+// index.js (Express version)
+
+import dotenv from "dotenv";
+dotenv.config();
+
+import express from "express";
+import { createServer } from "http";
+import { Server } from "socket.io";
+
+import { setupSocketServer } from "./ws/connection.js";
+import { RoomManager } from "./rooms/roomManager.js";
+import { AudioBridge } from "./forwarder/audioBridge.js";
+
+
+// ---------- EXPRESS ----------
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-// Middleware
-app.use(cors());
+// optional middlewares
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// Basic routes
-app.get('/', (req, res) => {
-  res.json({ message: 'Welcome to the Keyboard API' });
+app.get("/", (req, res) => {
+  res.send("server-sync alive");
 });
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+// ---------- HTTP + SOCKET.IO ----------
+const httpServer = createServer(app);
+
+const io = new Server(httpServer, {
+  cors: {
+    origin: process.env.CORS_ORIGIN || "*",
+    methods: ["GET", "POST"]
+  }
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Something went wrong!' });
-});
+// ---------- SERVICES ----------
+const audioForwarder =
+  new AudioBridge(process.env.AUDIO_SERVER_URL || "http://localhost:4000");
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({ error: 'Route not found' });
-});
+const roomManager =
+  new RoomManager(io, audioForwarder);
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+// attach socket layer
+setupSocketServer(io, roomManager);
 
-export default app;
+// ---------- START ----------
+const PORT = process.env.PORT || 3001;
+
+httpServer.listen(PORT, () =>
+  console.log(`server-sync running on ${PORT}`)
+);

@@ -12,7 +12,7 @@ export class BucketScheduler {
     this.merger = new Merger();
     this.dispatcher = new Dispatcher(io, audioForwarder);
 
-    this.TICK = 50;   // 50ms master clock
+    this.TICK = parseInt(process.env.BUCKET_TICK_MS) || 50;   // 50ms master clock
   }
 
   start() {

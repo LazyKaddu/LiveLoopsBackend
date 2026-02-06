@@ -75,7 +75,8 @@ export class AudioBridge {
     this.queue.push(bundle);
 
     // protect memory
-    if (this.queue.length > 2000) {
+    const maxQueue = parseInt(process.env.MAX_QUEUE_SIZE) || 2000;
+    if (this.queue.length > maxQueue) {
       this.queue.shift();   // drop oldest
     }
   }

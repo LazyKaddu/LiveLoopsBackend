@@ -38,7 +38,6 @@ export function attachRoomHandlers(io, socket, roomManager) {
   // MIDI FROM CLIENT
   socket.on("midi", (data) => {
 
-    // minimal validation
     if (!data?.note) return;
 
     roomManager.handleMidi({
@@ -46,9 +45,11 @@ export function attachRoomHandlers(io, socket, roomManager) {
       userId: socket.user.id,
       note: data.note,
       velocity: data.velocity,
-      time: Date.now()
+      time: data.time || Date.now(),
+      socketId: socket.id        // <--- IMPORTANT
     });
   });
+
 
 
   // DISCONNECT
