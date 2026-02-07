@@ -1,0 +1,40 @@
+# ---- Base Node ----
+FROM node:20-bullseye AS base
+
+# Install ffmpeg
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# ---- Dependencies ----
+FROM base AS deps
+
+COPY package.json package-lock.json* ./
+
+RUN npm ci --only=production
+
+# ---- Build Stage (if you later add TS/bundling) ----
+FROM base AS build
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# ---- Runtime ----
+FROM base AS runtime
+
+ENV NODE_ENV=production
+ENV PORT=4000
+
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Folder for HLS output
+RUN mkdir -p /app/hls && chmod 777 /app/hls
+
+EXPOSE 4000
+
+CMD ["node", "src/app.js"]
