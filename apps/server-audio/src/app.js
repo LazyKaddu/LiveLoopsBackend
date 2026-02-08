@@ -9,6 +9,7 @@ import { fileURLToPath } from "url";
 import { InstanceManager } from "./core/instanceManager.js";
 import { MidiReceiver } from "./inputs/midiReceiver.js";
 import { FrameClock } from "./renderer/frameClock.js";
+import { initializeRedis, RedisRegistry } from "./core/redisRegistry.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -102,17 +103,48 @@ app.use("/streams", express.static(path.join(process.cwd(), "streams")));
 // HLS stream URL endpoint
 app.get("/streams/:roomId/playlist.m3u8", (req, res) => {
   const room = instances.get(req.params.roomId);
-  res.json({
-    url: `http://${req.hostname}:${PORT}/streams/${req.params.roomId}/playlist.m3u8`
-  });
+  
+  if (!room) {
+    return res.status(404).json({ error: "room not found" });
+  }
+  
+  // Read and serve the actual playlist file
+  const filePath = path.join(process.cwd(), "streams", req.params.roomId, "playlist.m3u8");
+  res.sendFile(filePath);
 });
 
 // ---- START SERVER ----
 
-httpServer.listen(PORT, () => {
+let redis = null;
+let redisClient = null;
+
+httpServer.listen(PORT, async () => {
   console.log(`[AUDIO] running on ${PORT}`);
   
   // Start the global clock
   clock.start();
   console.log("[AUDIO] FrameClock started");
+
+  // Initialize Redis
+  try {
+    redisClient = await initializeRedis();
+    redis = new RedisRegistry(redisClient, { serverPort: PORT });
+    await redis.register();
+    redis.startHeartbeat();
+  } catch (error) {
+    console.error("[AUDIO] Redis initialization failed:", error.message);
+  }
+});
+
+// Graceful shutdown
+process.on("SIGTERM", async () => {
+  console.log("[AUDIO] SIGTERM received, shutting down...");
+  if (redis) await redis.disconnect();
+  process.exit(0);
+});
+
+process.on("SIGINT", async () => {
+  console.log("[AUDIO] SIGINT received, shutting down...");
+  if (redis) await redis.disconnect();
+  process.exit(0);
 });
