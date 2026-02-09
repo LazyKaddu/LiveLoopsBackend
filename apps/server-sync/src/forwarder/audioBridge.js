@@ -26,6 +26,7 @@ export class AudioBridge {
       // Discover available server-audio instances from Redis
       this.url = await this.discoverAudioServer();
       if (this.url) {
+        console.log(`[AudioBridge] Initialization successful, connecting to ${this.url}`);
         this.connect();
       } else {
         console.error("[AudioBridge] No available audio server found in Redis");
@@ -39,29 +40,32 @@ export class AudioBridge {
 
   async discoverAudioServer() {
     try {
-      // Query Redis for all available server-audio instances
-      // Assuming keys are stored as "server-audio:{id}" with their URLs
-      const keys = await this.redisClient.keys("server-audio:*");
+      // Query Redis hash for available server-audio instances
+      // server-audio stores in hash "audio-servers" with field "{hostname}:{port}"
+      const servers = await this.redisClient.hGetAll("audio-servers");
 
-      if (keys.length === 0) {
+      if (!servers || Object.keys(servers).length === 0) {
         console.warn("[AudioBridge] No server-audio instances found in Redis");
         return null;
       }
 
-      // Get all available servers and their health status
+      // Get all available servers and build connection URLs
       const availableServers = [];
-      for (const key of keys) {
-        const serverData = await this.redisClient.get(key);
-        if (serverData) {
-          try {
-            const server = JSON.parse(serverData);
-            if (server.healthy !== false) {
-              availableServers.push(server.url || serverData);
-            }
-          } catch {
-            // If it's not JSON, treat it as a URL string
-            availableServers.push(serverData);
+      for (const [id, serverData] of Object.entries(servers)) {
+        try {
+          const server = JSON.parse(serverData);
+          // Build URL from address field (e.g., "http://hostname:4000")
+          if (server.address) {
+            availableServers.push({
+              id,
+              url: server.address.startsWith("http") 
+                ? server.address 
+                : `http://${server.address}`,
+              server
+            });
           }
+        } catch (e) {
+          console.warn(`[AudioBridge] Failed to parse server ${id}:`, e.message);
         }
       }
 
@@ -71,9 +75,9 @@ export class AudioBridge {
       }
 
       // Pick a random available server
-      const selectedUrl = availableServers[Math.floor(Math.random() * availableServers.length)];
-      console.log("[AudioBridge] Selected server:", selectedUrl);
-      return selectedUrl;
+      const selected = availableServers[Math.floor(Math.random() * availableServers.length)];
+      console.log(`[AudioBridge] Discovered ${availableServers.length} audio server(s), selected: ${selected.id} at ${selected.url}`);
+      return selected.url;
     } catch (error) {
       console.error("[AudioBridge] Discovery error:", error);
       return null;

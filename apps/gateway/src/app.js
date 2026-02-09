@@ -1,3 +1,6 @@
+import dotenv from 'dotenv'
+dotenv.config()
+
 import express from 'express'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
@@ -32,7 +35,28 @@ const http = createServer(app)
 app.use(bodyParser.json({ limit: '1mb' }))
 app.use(morgan('dev'))
 
-// auth for HTTP
+// ─────────────────────────────────────────────
+// Health & Meta (Public routes - before auth)
+// ─────────────────────────────────────────────
+
+app.get('/health', async (req, res) => {
+  try {
+    // check redis connectivity
+    await redisMap.redis.ping()
+
+    res.json({
+      ok: true,
+      time: Date.now()
+    })
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      error: 'REDIS_DOWN'
+    })
+  }
+})
+
+// auth for HTTP (everything else requires auth)
 app.use(httpAuth(true))
 app.use(attachIdentity)
 
@@ -62,25 +86,8 @@ attachRoomsAPI(app, io)
 attachStreamsAPI(app, io)
 
 // ─────────────────────────────────────────────
-// Health & Meta
+// Metrics (also public for monitoring)
 // ─────────────────────────────────────────────
-
-app.get('/health', async (req, res) => {
-  try {
-    // check redis connectivity
-    await redisMap.redis.ping()
-
-    res.json({
-      ok: true,
-      time: Date.now()
-    })
-  } catch (err) {
-    res.status(500).json({
-      ok: false,
-      error: 'REDIS_DOWN'
-    })
-  }
-})
 
 app.get('/metrics', async (req, res) => {
   const state = await redisMap.listServers()

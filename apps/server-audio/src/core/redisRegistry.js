@@ -29,7 +29,16 @@ export class RedisRegistry {
     this.serverPort = options.serverPort || 4000;
     this.heartbeatInterval = options.heartbeatInterval || 5000;
     this.registryKey = "audio-servers";
-    this.serverInstanceId = `${os.hostname()}:${this.serverPort}`;
+    
+    // Allow configurable host for service discovery
+    // In containerized environments, use ADVERTISE_HOST or AUDIO_SERVER_HOST
+    const advertiseHost = process.env.ADVERTISE_HOST 
+      || process.env.AUDIO_SERVER_HOST 
+      || process.env.HOST
+      || "localhost";
+    
+    this.serverInstanceId = `${advertiseHost}:${this.serverPort}`;
+    this.advertiseHost = advertiseHost;
     this.heartbeatTimer = null;
   }
 
@@ -41,9 +50,9 @@ export class RedisRegistry {
 
     try {
       const serverInfo = {
-        host: os.hostname(),
+        host: this.advertiseHost,
         port: this.serverPort,
-        address: `http://${os.hostname()}:${this.serverPort}`,
+        address: `http://${this.advertiseHost}:${this.serverPort}`,
         pid: process.pid,
         uptime: process.uptime(),
         timestamp: Date.now()
@@ -59,7 +68,7 @@ export class RedisRegistry {
       // Set expiration
       await this.client.expire(this.registryKey, 30);
 
-      console.log(`[Redis] Registered as ${this.serverInstanceId}`);
+      console.log(`[Redis] Registered as ${this.serverInstanceId} at ${serverInfo.address}`);
       return true;
     } catch (error) {
       console.error("[Redis] Registration failed:", error.message);

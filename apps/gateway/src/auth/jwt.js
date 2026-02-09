@@ -76,5 +76,19 @@ export class JWTService {
   }
 }
 
-// Singleton helper
-export const jwtService = new JWTService()
+// Lazy singleton - instantiate only when first accessed
+let _instance = null
+
+export function getJWTService() {
+  if (!_instance) {
+    _instance = new JWTService()
+  }
+  return _instance
+}
+
+// For backward compatibility, export as property
+export const jwtService = new Proxy({}, {
+  get: (target, prop) => {
+    return getJWTService()[prop]
+  }
+})
